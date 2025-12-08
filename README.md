@@ -1,27 +1,35 @@
-# 🤖 Monitor de Editais REDA - Bahia
+# 🤖 Monitor de Editais & Oportunidades - Bahia
 
 ![Status](https://img.shields.io/badge/Status-Operacional-brightgreen)
 ![Python](https://img.shields.io/badge/Python-3.11-blue)
 ![AI](https://img.shields.io/badge/AI-Google%20Gemini-orange)
+![Pipeline](https://img.shields.io/badge/Pipeline-GitHub%20Actions-blueviolet)
 
-> **Automação Inteligente para Monitoramento de Vagas Públicas**
+> **Automação Inteligente para Monitoramento de Vagas e Processos Seletivos**
 
-Este projeto é um bot autônomo desenvolvido para monitorar o portal de servidores do Governo da Bahia em busca de novos Processos Seletivos (REDA). O sistema utiliza **Web Scraping** para coletar dados e **Inteligência Artificial (LLM)** para analisar se as vagas são relevantes para profissionais de Tecnologia da Informação e Gestão.
+Este projeto é um **Agente Autônomo** desenvolvido para monitorar oportunidades públicas no Governo da Bahia (REDA, Estágios, Processos Seletivos). O sistema utiliza uma estratégia de **Search Scraping** para contornar bloqueios de região, sanitiza os dados e utiliza **Inteligência Artificial (LLM)** para resumir e notificar novas vagas em tempo real via Telegram.
 
-## 🚀 Funcionalidades
+---
 
-- 🕵️ **Web Scraping Automático:** Verifica o site oficial do governo a cada 2 horas.
-- 🧠 **Análise com IA:** Utiliza a API do **Google Gemini** para ler os títulos e links, filtrando apenas o que é relevante (TI, Suporte, Administrativo).
-- 📢 **Notificações em Tempo Real:** Envia um alerta formatado para um Canal no **Telegram** assim que uma oportunidade é detectada.
-- ☁️ **Arquitetura Serverless:** Roda 100% na nuvem via **GitHub Actions**, sem custo de servidor e sem necessidade de máquina local ligada.
+## 🚀 Destaques Técnicos
 
-## 🛠️ Arquitetura do Projeto
+O diferencial deste projeto é a resiliência e a capacidade de filtrar informações úteis:
 
-O fluxo de dados segue a seguinte lógica:
+* 🛡️ **Bypass de Firewall:** Utiliza consultas estruturadas no **Google Search** para acessar editais hospedados em servidores governamentais que bloqueiam requisições externas (GitHub Cloud), eliminando erros de *Timeout*.
+* 🧹 **Sanitização de URLs:** Módulo dedicado para decodificar e limpar links de redirecionamento (`unquote`), garantindo acesso direto à fonte oficial.
+* 🧠 **Análise Cognitiva:** Integração com a API **Google Gemini (GenAI)** para ler títulos técnicos e transformá-los em resumos atrativos para divulgação.
+* ☁️ **Arquitetura Serverless:** Operação 100% em nuvem via **GitHub Actions** (Cron Jobs), sem custos de infraestrutura.
+
+## 🛠️ Arquitetura da Solução
+
+O fluxo de dados segue uma lógica de funil para garantir qualidade:
 
 ```mermaid
-graph LR
-    A[Portal Bahia] -->|Scraping| B(Bot Python)
-    B -->|Texto Bruto| C{Google Gemini AI}
-    C -->|Analisa e Resume| D[Formatador]
-    D -->|Mensagem Pronta| E[📢 Canal do Telegram]
+graph TD
+    A[Cron Job (2h)] -->|Inicia| B[Bot Python]
+    B -->|Query Avançada| C[Google Search Engine]
+    C -->|Resultados Brutos| D{Filtro de Segurança}
+    D -->|Link Externo| X[Descartar]
+    D -->|Dominio .ba.gov.br| E[Limpador de Links]
+    E -->|Link Limpo| F[Google Gemini AI]
+    F -->|Resumo Gerado| G[📢 Canal Telegram]
