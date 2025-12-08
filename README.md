@@ -23,6 +23,5 @@ O fluxo de dados segue a seguinte lógica:
 graph LR
     A[Portal Bahia] -->|Scraping| B(Bot Python)
     B -->|Texto Bruto| C{Google Gemini AI}
-    C -->|Não é TI| D[Ignorar]
-    C -->|É Vaga de TI| E[Gerar Resumo]
-    E -->|API| F[📢 Canal do Telegram]
+    C -->|Analisa e Resume| D[Formatador]
+    D -->|Mensagem Pronta| E[📢 Canal do Telegram]
