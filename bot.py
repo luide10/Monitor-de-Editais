@@ -16,16 +16,18 @@ bot = telebot.TeleBot(TELEGRAM_TOKEN)
 
 def analisar_edital(titulo, link):
     prompt = f"""
-    Você é um assistente de carreira. Analise este título de vaga pública na Bahia:
+    Você é um assistente de concursos públicos. Analise este título de vaga pública na Bahia:
     '{titulo}'
     Link: {link}
-
+    
+    Sua missão é resumir a oportunidade, INDEPENDENTE da área (Saúde, Educação, TI, Adm, etc).
+    Não ignore nada.
+    
     Responda EXATAMENTE neste formato:
-    📢 **ALERTA DE VAGA**
-    🏢 **Órgão:** [Nome]
-    💼 **Área:** [Áreas principais]
-    🤖 **Serve para TI/Gestão?** [Sim/Não/Talvez]
-    💡 **Resumo:** [Explicação em 1 frase]
+    📢 **NOVO EDITAL NA ÁREA!**
+    🏢 **Órgão:** [Identifique o Órgão/Secretaria]
+    💼 **Vagas:** [Cite as principais áreas ou cargos brevemente]
+    💡 **Resumo:** [Explicação rápida em 1 frase]
     """
     try:
         response = model.generate_content(prompt)
