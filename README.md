@@ -26,10 +26,10 @@ O fluxo de dados segue uma lógica de funil para garantir qualidade:
 
 ```mermaid
 graph TD
-    A[Cron Job (2h)] -->|Inicia| B[Bot Python]
-    B -->|Query Avançada| C[Google Search Engine]
-    C -->|Resultados Brutos| D{Filtro de Segurança}
-    D -->|Link Externo| X[Descartar]
-    D -->|Dominio .ba.gov.br| E[Limpador de Links]
-    E -->|Link Limpo| F[Google Gemini AI]
-    F -->|Resumo Gerado| G[📢 Canal Telegram]
+    A["Cron Job (2h)"] -->|Inicia| B["Bot Python"]
+    B -->|Query Avançada| C["Google Search Engine"]
+    C -->|Resultados Brutos| D{"Filtro de Segurança"}
+    D -->|Link Externo| X["Descartar"]
+    D -->|Dominio .ba.gov.br| E["Limpador de Links"]
+    E -->|Link Limpo| F["Google Gemini AI"]
+    F -->|Resumo Gerado| G["📢 Canal Telegram"]    
