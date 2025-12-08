@@ -1,0 +1,32 @@
+name: Monitor de Editais
+
+on:
+  schedule:
+    # Roda a cada 2 horas (cron job)
+    - cron: '0 */2 * * *'
+  # Permite rodar manualmente clicando num botão (pra testar agora)
+  workflow_dispatch:
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Baixar código
+        uses: actions/checkout@v3
+
+      - name: Instalar Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Instalar Dependências
+        run: |
+          pip install -r requirements.txt
+
+      - name: Rodar o Bot
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          MEU_CHAT_ID: ${{ secrets.MEU_CHAT_ID }}
+        run: python bot.py
