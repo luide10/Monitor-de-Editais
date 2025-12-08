@@ -3,74 +3,74 @@ import telebot
 import google.generativeai as genai
 import requests
 from bs4 import BeautifulSoup
+import urllib3
 
-# Pega as senhas do cofre do GitHub
+# Desabilita avisos de segurança para garantir acesso ao site do governo
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+# Pega as senhas
 TELEGRAM_TOKEN = os.environ.get('TELEGRAM_TOKEN')
 GOOGLE_API_KEY = os.environ.get('GOOGLE_API_KEY')
 CHAT_ID = os.environ.get('MEU_CHAT_ID')
 
-# Configurações
 genai.configure(api_key=GOOGLE_API_KEY)
 model = genai.GenerativeModel('gemini-pro')
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
 
 def verificar():
-    print("--- Iniciando Diagnóstico de Visão ---")
-    url = "https://www.ba.gov.br/servidores"
+    print("--- Acessando Portal RH BAHIA ---")
+    
+    # URL CORRIGIDA: Este é o site onde as notícias realmente estão
+    url = "https://servidores.rhbahia.ba.gov.br/"
     
     try:
         headers = {'User-Agent': 'Mozilla/5.0'}
-        response = requests.get(url, headers=headers)
+        # verify=False ajuda a pular bloqueios de certificado do governo
+        response = requests.get(url, headers=headers, verify=False)
         soup = BeautifulSoup(response.text, 'html.parser')
         
-        # Pega as manchetes
-        noticias = soup.find_all(['h2', 'h3'])
+        # Nesse portal novo, as manchetes podem estar em links diretos (a) dentro de destaques
+        # Vamos pegar textos de links que tenham tamanho razoável
+        elementos = soup.find_all('a')
         
-        if len(noticias) > 0:
-            # --- BLOCO DE DIAGNÓSTICO (Força o envio da primeira notícia) ---
-            primeira_manchete = noticias[0].get_text().strip()
+        manchetes_encontradas = []
+        
+        # Filtra apenas textos que pareçam manchetes (mais de 20 letras)
+        for item in elementos:
+            texto = item.get_text().strip()
+            if len(texto) > 25:
+                manchetes_encontradas.append(texto)
+
+        # --- DIAGNÓSTICO VISUAL (PROVA DE VIDA) ---
+        if len(manchetes_encontradas) > 0:
+            primeira = manchetes_encontradas[0] # Pega a primeira que achou
             
-            # Monta uma mensagem de status
-            msg_status = (
-                f"🤖 **STATUS DO SISTEMA: ONLINE**\n"
-                f"✅ Conexão com site: OK\n"
-                f"👀 Manchetes lidas: {len(noticias)}\n\n"
-                f"📰 **Manchete mais recente na capa:**\n"
-                f"_{primeira_manchete}_\n\n"
-                f"(O bot continua monitorando vagas em segundo plano...)"
+            msg = (
+                f"🤖 **DIAGNÓSTICO: AGORA FOI!**\n"
+                f"Acessei: RH Bahia\n"
+                f"Manchetes lidas: {len(manchetes_encontradas)}\n\n"
+                f"📰 **Destaque da Capa:**\n"
+                f"_{primeira}_"
             )
             
-            # Envia para o canal para provar que está vendo
-            try:
-                if CHAT_ID and CHAT_ID != '0':
-                    bot.send_message(CHAT_ID, msg_status, parse_mode='Markdown')
-                    print("Mensagem de diagnóstico enviada!")
-            except Exception as e:
-                print(f"Erro ao enviar diagnóstico: {e}")
-            # -------------------------------------------------------------
-
-        # Agora continua a verificação normal de vagas (seu código antigo)
-        keywords = ['REDA', 'SELEÇÃO', 'CONCURSO', 'INSCRIÇÃO', 'EDITAL', 'ESTÁGIO', 'CURSO']
-        
-        for item in noticias[:10]:
-            texto = item.get_text().strip()
-            link_tag = item.find('a')
-            
-            if link_tag:
-                link = link_tag['href']
-                if not link.startswith('http'): link = 'https://www.ba.gov.br' + link
-                
-                # Só manda a análise detalhada SE for uma das palavras chaves
-                if any(k in texto.upper() for k in keywords):
-                    # Lógica de análise aqui (simplificada para não duplicar código)
-                    print(f"Vaga encontrada: {texto}")
-                    # Se quiser ativar o envio das vagas também, descomente as linhas de envio normal
+            if CHAT_ID:
+                try:
+                    bot.send_message(CHAT_ID, msg, parse_mode='Markdown')
+                    print("✅ Diagnóstico enviado para o canal!")
+                except Exception as e:
+                    print(f"Erro ao enviar: {e}")
+            return # Para o teste aqui para não flodar
+        else:
+            print("Ainda não achei textos longos. A estrutura pode ser diferente.")
+            # Se não achou links, tenta procurar parágrafos de destaque
+            destaques = soup.find_all('p')
+            if len(destaques) > 0:
+                 print(f"Achei parágrafos: {destaques[0].get_text()}")
 
     except Exception as e:
-        print(f"Erro: {e}")
-        # Se der erro, avisa no log
+        print(f"Erro Crítico: {e}")
         if CHAT_ID:
-            bot.send_message(CHAT_ID, f"⚠️ Erro ao acessar o site: {e}")
+            bot.send_message(CHAT_ID, f"Erro técnico: {e}")
 
 if __name__ == "__main__":
     verificar()
