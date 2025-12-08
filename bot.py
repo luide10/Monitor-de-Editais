@@ -78,12 +78,4 @@ def verificar():
         print(f"Erro: {e}")
 
 if __name__ == "__main__":
-    # --- LINHA DE TESTE (ENVIO FORÇADO) ---
-    try:
-        bot.send_message(CHAT_ID, "🔔 TESTE DE CONEXÃO: Se você leu isso, o bot está funcionando!")
-        print("Mensagem de teste enviada com sucesso.")
-    except Exception as e:
-        print(f"Erro ao enviar teste: {e}")
-    # ---------------------------------------
-    
     verificar()
