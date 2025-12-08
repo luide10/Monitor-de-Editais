@@ -56,7 +56,7 @@ def verificar():
         
         encontrou = False
         
-        # Analisa as 10 primeiras manchetes para aumentar a chance de achar algo útil agora
+        # AUMENTO DO RAIO: Analisa as 10 primeiras manchetes (antes eram 5)
         for item in noticias[:10]:
             texto = item.get_text().strip()
             link_tag = item.find('a')
