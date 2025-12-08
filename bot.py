@@ -5,10 +5,8 @@ import requests
 from bs4 import BeautifulSoup
 import urllib3
 
-# Desabilita avisos de segurança para garantir acesso ao site do governo
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-
-# Pega as senhas
+# Configurações iniciais
+urllib3.disable_warnings()
 TELEGRAM_TOKEN = os.environ.get('TELEGRAM_TOKEN')
 GOOGLE_API_KEY = os.environ.get('GOOGLE_API_KEY')
 CHAT_ID = os.environ.get('MEU_CHAT_ID')
@@ -18,59 +16,73 @@ model = genai.GenerativeModel('gemini-pro')
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
 
 def verificar():
-    print("--- Acessando Portal RH BAHIA ---")
+    print("--- INICIANDO SISTEMA VIA GOOGLE ---", flush=True)
     
-    # URL CORRIGIDA: Este é o site onde as notícias realmente estão
-    url = "https://servidores.rhbahia.ba.gov.br/"
+    # ESTRATÉGIA ANTI-BLOQUEIO:
+    # Vamos pesquisar no Google News por editais recentes na Bahia
+    url = "https://www.google.com/search?q=site:ba.gov.br+REDA+2025+inscrições&tbm=nws"
+    
+    print(f"📡 Consultando o Google...", flush=True)
     
     try:
-        headers = {'User-Agent': 'Mozilla/5.0'}
-        # verify=False ajuda a pular bloqueios de certificado do governo
-        response = requests.get(url, headers=headers, verify=False)
+        # Headers essenciais para o Google não bloquear
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        }
+        
+        # Timeout curto, pois o Google responde rápido
+        response = requests.get(url, headers=headers, timeout=10)
+        
         soup = BeautifulSoup(response.text, 'html.parser')
         
-        # Nesse portal novo, as manchetes podem estar em links diretos (a) dentro de destaques
-        # Vamos pegar textos de links que tenham tamanho razoável
-        elementos = soup.find_all('a')
+        # O Google News geralmente coloca títulos em divs com role='heading' ou tags h3
+        resultados = soup.find_all('div', role='heading')
         
-        manchetes_encontradas = []
-        
-        # Filtra apenas textos que pareçam manchetes (mais de 20 letras)
-        for item in elementos:
-            texto = item.get_text().strip()
-            if len(texto) > 25:
-                manchetes_encontradas.append(texto)
+        if not resultados:
+            resultados = soup.find_all('h3')
 
-        # --- DIAGNÓSTICO VISUAL (PROVA DE VIDA) ---
-        if len(manchetes_encontradas) > 0:
-            primeira = manchetes_encontradas[0] # Pega a primeira que achou
+        encontrou_algo = False
+        
+        # Pega o primeiro resultado só para provar que funcionou
+        for item in resultados[:1]:
+            titulo = item.get_text().strip()
             
+            # Tenta limpar o link (o Google suja o link com redirecionamentos)
+            parent = item.find_parent('a')
+            link = "Link do Google"
+            if parent and 'href' in parent.attrs:
+                raw_link = parent['href']
+                if "/url?q=" in raw_link:
+                    link = raw_link.split("/url?q=")[1].split("&")[0]
+                else:
+                    link = raw_link
+
+            print(f"🔎 Encontrei: {titulo}")
+            
+            # Manda para o canal a prova de vida
             msg = (
-                f"🤖 **DIAGNÓSTICO: AGORA FOI!**\n"
-                f"Acessei: RH Bahia\n"
-                f"Manchetes lidas: {len(manchetes_encontradas)}\n\n"
-                f"📰 **Destaque da Capa:**\n"
-                f"_{primeira}_"
+                f"🤖 **STATUS: CONEXÃO RECUPERADA!**\n"
+                f"Usei o Google para pular o bloqueio.\n\n"
+                f"📰 **Última notícia encontrada:**\n"
+                f"_{titulo}_\n\n"
+                f"🔗 {link}"
             )
             
             if CHAT_ID:
                 try:
-                    bot.send_message(CHAT_ID, msg, parse_mode='Markdown')
-                    print("✅ Diagnóstico enviado para o canal!")
+                    bot.send_message(CHAT_ID, msg)
+                    print("✅ Sucesso! Mensagem enviada.")
+                    encontrou_algo = True
                 except Exception as e:
-                    print(f"Erro ao enviar: {e}")
-            return # Para o teste aqui para não flodar
-        else:
-            print("Ainda não achei textos longos. A estrutura pode ser diferente.")
-            # Se não achou links, tenta procurar parágrafos de destaque
-            destaques = soup.find_all('p')
-            if len(destaques) > 0:
-                 print(f"Achei parágrafos: {destaques[0].get_text()}")
+                    print(f"Erro Telegram: {e}")
+            
+        if not encontrou_algo:
+            print("Google acessado, mas estrutura HTML diferente da esperada.")
+            if CHAT_ID:
+                bot.send_message(CHAT_ID, "⚠️ Google acessado, mas sem manchetes legíveis.")
 
     except Exception as e:
-        print(f"Erro Crítico: {e}")
-        if CHAT_ID:
-            bot.send_message(CHAT_ID, f"Erro técnico: {e}")
+        print(f"❌ ERRO GERAL: {e}")
 
 if __name__ == "__main__":
     verificar()
