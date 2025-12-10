@@ -76,20 +76,23 @@ def extrair_texto(url):
         headers = {'User-Agent': 'Mozilla/5.0'}
         resp = requests.get(url, headers=headers, timeout=10)
         soup = BeautifulSoup(resp.content, 'html.parser')
-        # Pega parágrafos
         return soup.get_text(" ", strip=True)[:3000]
     except:
         return "Texto não acessível, baseie-se no título."
 
 # --- 3. MOTORES DE BUSCA (ESTRATÉGIA DUPLA RSS) ---
 
-def processar_rss(url_rss, nome_motor, filtro_tempo_horas=3):
-    """Função genérica para processar qualquer RSS do Google News"""
-    print(f"--- 📡 Rodando Motor: {nome_motor} ---")
+def processar_rss(url_rss, nome_motor, filtro_tempo_horas=24):
+    """
+    MODIFICADO: filtro_tempo_horas agora é 24 por padrão para teste.
+    """
+    print(f"--- 📡 Rodando Motor: {nome_motor} (Olhando últimas {filtro_tempo_horas}h) ---")
     
     feed = feedparser.parse(url_rss)
     enviados = carregar_historico()
     agora = datetime.now()
+    
+    # AQUI ESTÁ A MUDANÇA PARA O TESTE
     margem = agora - timedelta(hours=filtro_tempo_horas)
     
     contador = 0
@@ -100,13 +103,12 @@ def processar_rss(url_rss, nome_motor, filtro_tempo_horas=3):
         
         if link in enviados: continue
 
-        # Verifica data
         try:
             data_pub = parsedate_to_datetime(entry.published).replace(tzinfo=None)
         except:
             data_pub = agora 
 
-        # Se for recente e tiver palavra chave
+        # Se a notícia for mais recente que a margem (24h)
         if data_pub > margem:
             if any(p in titulo.lower() for p in PALAVRAS_CHAVE):
                 print(f"   > Encontrado: {titulo}")
@@ -117,22 +119,19 @@ def processar_rss(url_rss, nome_motor, filtro_tempo_horas=3):
                 
                 salvar_historico(link)
                 enviados.add(link)
-                time.sleep(2)
+                time.sleep(2) # Pausa leve
                 contador += 1
     
     print(f"   > {nome_motor} finalizado. {contador} novos itens processados.")
 
 def main():
-    print("🚀 Execução Iniciada (Estratégia Full-RSS)")
+    print("🚀 Execução de TESTE (Janela de 24 Horas)")
     
     # MOTOR 1: Busca Geral (Jornais, Blogs, G1, etc)
-    # Procura: Concurso Bahia OU Policia Bahia
     rss_geral = "https://news.google.com/rss/search?q=concurso+bahia+OR+policia+bahia+OR+reda+bahia&hl=pt-BR&gl=BR&ceid=BR:pt-419"
     processar_rss(rss_geral, "Busca Geral Notícias")
 
-    # MOTOR 2: Busca Cirúrgica no Governo (Substituto do Motor BA.GOV que falhou)
-    # Procura: site:ba.gov.br (REDA OU PROCESSO SELETIVO)
-    # Isso força o Google a nos dar só o que está dentro do site do governo, mas já renderizado!
+    # MOTOR 2: Busca Cirúrgica no Governo
     rss_governo = "https://news.google.com/rss/search?q=site:ba.gov.br+(reda+OR+processo+seletivo+OR+edital)&hl=pt-BR&gl=BR&ceid=BR:pt-419"
     processar_rss(rss_governo, "Raio-X Governo BA")
 
