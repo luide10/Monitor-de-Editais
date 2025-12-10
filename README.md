@@ -31,14 +31,14 @@ O sistema opera com dois motores de busca rodando em paralelo:
 
 ```mermaid
 graph TD
-    A["🕒 Agendador (GitHub Actions)"] -->|A cada 2h| B["🚀 Iniciar Bot"]
+    A["🕒 Agendador<br>(GitHub Actions)"] -->|A cada 2h| B["🚀 Iniciar Bot"]
     
     subgraph "Motores de Busca (RSS)"
-    B -->|"Busca Ampla"| C["📡 Google News Geral"]
-    B -->|"Busca Cirúrgica"| D["🎯 Google Index: site:ba.gov.br"]
+    B -->|"Busca Ampla"| C["📡 Google News<br>Geral"]
+    B -->|"Busca Cirúrgica"| D["🎯 Google Index:<br>site:ba.gov.br"]
     end
     
-    C -->|"Notícias Recentes"| E["Filtro de Palavras-Chave"]
+    C -->|"Notícias Recentes"| E["Filtro de<br>Palavras-Chave"]
     D -->|"Editais Oficiais"| E
     
     E -->|"Texto Bruto"| F["🧠 IA Google Gemini"]
