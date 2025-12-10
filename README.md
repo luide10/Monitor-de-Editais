@@ -31,7 +31,7 @@ O sistema opera com dois motores de busca rodando em paralelo:
 
 ```mermaid
 graph TD
-    A["🕒 Cron Job (GitHub Actions)"] -->|A cada 2h| B["🚀 Iniciar Bot"]
+    A["🕒 Agendador (GitHub Actions)"] -->|A cada 2h| B["🚀 Iniciar Bot"]
     
     subgraph "Motores de Busca (RSS)"
     B -->|"Busca Ampla"| C["📡 Google News Geral"]
@@ -41,7 +41,7 @@ graph TD
     C -->|"Notícias Recentes"| E["Filtro de Palavras-Chave"]
     D -->|"Editais Oficiais"| E
     
-    E -->|"Texto Bruto"| F["🧠 Google Gemini AI"]
+    E -->|"Texto Bruto"| F["🧠 IA Google Gemini"]
     
     F -->|"Dados Estruturados"| G{"Decisor"}
-    G -- "Nova Oportunidade" --> H["📢 Telegram Bot"]
+    G -- "Nova Oportunidade" --> H["📢 Bot Telegram"]
