@@ -82,9 +82,9 @@ def extrair_texto(url):
 
 # --- 3. MOTORES DE BUSCA (ESTRATÉGIA DUPLA RSS) ---
 
-def processar_rss(url_rss, nome_motor, filtro_tempo_horas=24):
+def processar_rss(url_rss, nome_motor, filtro_tempo_horas=3):
     """
-    MODIFICADO: filtro_tempo_horas agora é 24 por padrão para teste.
+    MODO PRODUÇÃO: filtro_tempo_horas definido para 3 horas.
     """
     print(f"--- 📡 Rodando Motor: {nome_motor} (Olhando últimas {filtro_tempo_horas}h) ---")
     
@@ -92,7 +92,7 @@ def processar_rss(url_rss, nome_motor, filtro_tempo_horas=24):
     enviados = carregar_historico()
     agora = datetime.now()
     
-    # AQUI ESTÁ A MUDANÇA PARA O TESTE
+    # Janela de tempo curta para evitar repetições no GitHub Actions
     margem = agora - timedelta(hours=filtro_tempo_horas)
     
     contador = 0
@@ -108,7 +108,7 @@ def processar_rss(url_rss, nome_motor, filtro_tempo_horas=24):
         except:
             data_pub = agora 
 
-        # Se a notícia for mais recente que a margem (24h)
+        # Se a notícia for recente (> 3h)
         if data_pub > margem:
             if any(p in titulo.lower() for p in PALAVRAS_CHAVE):
                 print(f"   > Encontrado: {titulo}")
@@ -119,13 +119,13 @@ def processar_rss(url_rss, nome_motor, filtro_tempo_horas=24):
                 
                 salvar_historico(link)
                 enviados.add(link)
-                time.sleep(2) # Pausa leve
+                time.sleep(2)
                 contador += 1
     
     print(f"   > {nome_motor} finalizado. {contador} novos itens processados.")
 
 def main():
-    print("🚀 Execução de TESTE (Janela de 24 Horas)")
+    print("🚀 Monitor de Editais Rodando (Modo Silencioso)")
     
     # MOTOR 1: Busca Geral (Jornais, Blogs, G1, etc)
     rss_geral = "https://news.google.com/rss/search?q=concurso+bahia+OR+policia+bahia+OR+reda+bahia&hl=pt-BR&gl=BR&ceid=BR:pt-419"
