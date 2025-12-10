@@ -1,4 +1,5 @@
 pyTelegramBotAPI
 google-generativeai
+feedparser
 requests
 beautifulsoup4
