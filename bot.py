@@ -94,19 +94,30 @@ def motor_ba_gov():
     try:
         headers = {'User-Agent': 'Mozilla/5.0'}
         response = requests.get(url, headers=headers)
+        
+        # --- LINHAS DE TESTE NOVAS ---
+        print(f"Status da conexão: {response.status_code}") # Deve ser 200
+        # -----------------------------
+
         soup = BeautifulSoup(response.text, 'html.parser')
         noticias = soup.find_all(['h2', 'h3'])
         
-        # Analisa apenas as 3 primeiras manchetes para evitar spam de coisas velhas
+        # --- LINHA DE TESTE NOVA ---
+        print(f"🔎 O Robô enxergou {len(noticias)} manchetes nesta página.")
+        # ---------------------------
+        
+        # Analisa apenas as 3 primeiras
         for item in noticias[:3]: 
             titulo = item.get_text().strip()
+            # Imprime o título nos logs para você ver o que ele leu
+            print(f"   > Manchete lida: {titulo}") 
+            
             link_tag = item.find('a')
             if link_tag:
                 link = link_tag['href']
                 if not link.startswith('http'): link = 'https://www.ba.gov.br' + link
                 
                 if any(p in titulo.lower() for p in PALAVRAS_CHAVE):
-                    # Como esse site não tem data fácil, mandamos para a IA analisar
                     try:
                         resp = requests.get(link, headers=headers)
                         soup_d = BeautifulSoup(resp.content, 'html.parser')
@@ -119,7 +130,7 @@ def motor_ba_gov():
                     time.sleep(2)
 
     except Exception as e:
-        print(f"Erro: {e}")
+        print(f"Erro CRÍTICO ao ler ba.gov: {e}")
 
 def main():
     print("🚀 Execução Única Iniciada (GitHub Actions)")
