@@ -25,29 +25,44 @@ genai.configure(api_key=GOOGLE_API_KEY)
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
 ARQUIVO_HISTORICO = "historico_enviados.txt"
 
-# --- 2. SELETOR DE MODELO INTELIGENTE ---
+# --- 2. SELETOR DE MODELO BLINDADO ---
 def configurar_modelo():
-    print("🔍 Configurando IA...")
-    # ORDEM DE PREFERÊNCIA ALTERADA: 1.5 Flash primeiro (Mais cota grátis)
+    print("🔍 Configurando IA (Buscando modelo estável)...")
+    
+    # LISTA DE PRIORIDADE ATUALIZADA
+    # Removemos as versões 2.0/2.5 (cota baixa) e priorizamos os "latest"
     preferencias = [
-        'models/gemini-1.5-flash', # O "Trator" (Alto limite)
-        'models/gemini-1.5-pro',
-        'models/gemini-2.0-flash', 
-        'models/gemini-pro'
+        'models/gemini-flash-latest',   # Geralmente aponta para 1.5 Flash (Cota Alta)
+        'models/gemini-1.5-flash',
+        'models/gemini-1.5-flash-001',
+        'models/gemini-1.5-flash-8b',
+        'models/gemini-pro',            # Clássico estável
+        'models/gemini-1.0-pro'
     ]
     
     try:
-        modelos_disponiveis = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+        # Pega a lista real do Google
+        todos_modelos = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+        
         modelo_escolhido = None
 
+        # Tenta achar um da nossa lista de preferidos
         for pref in preferencias:
-            if pref in modelos_disponiveis:
+            if pref in todos_modelos:
                 modelo_escolhido = pref
                 break
         
+        # Se não achar nenhum dos preferidos, tenta um fallback seguro
         if not modelo_escolhido:
-            # Pega qualquer um que tenha gemini
-            for m in modelos_disponiveis:
+            # Evita pegar modelos experimentais (exp) ou previews numéricos altos se possível
+            for m in todos_modelos:
+                if 'gemini' in m and 'flash' in m and 'exp' not in m and '2.' not in m:
+                    modelo_escolhido = m
+                    break
+        
+        # Se ainda assim não achar, pega o primeiro que tiver gemini
+        if not modelo_escolhido:
+             for m in todos_modelos:
                 if 'gemini' in m:
                     modelo_escolhido = m
                     break
@@ -63,8 +78,8 @@ def configurar_modelo():
         return genai.GenerativeModel(modelo_escolhido, safety_settings=safety_settings)
 
     except Exception as e:
-        print(f"⚠️ Erro ao listar modelos: {e}. Usando fallback.")
-        return genai.GenerativeModel('gemini-1.5-flash')
+        print(f"⚠️ Erro ao listar modelos: {e}. Forçando gemini-flash-latest.")
+        return genai.GenerativeModel('gemini-flash-latest')
 
 model = configurar_modelo()
 
@@ -110,15 +125,20 @@ def analisar_com_ia(titulo, texto_site, link, fonte):
             return response.text
         except Exception as e:
             erro_str = str(e)
+            # Se for erro de cota (429), espera e tenta de novo
             if "429" in erro_str or "quota" in erro_str.lower():
-                print(f"⏳ Cota excedida (429). Esperando 60s antes de tentar de novo... (Tentativa {tentativas+1}/{max_tentativas})")
-                time.sleep(60) # Espera 1 minuto
+                print(f"⏳ Cota excedida (429). Esperando 60s... (Tentativa {tentativas+1}/{max_tentativas})")
+                time.sleep(60) 
                 tentativas += 1
+            # Se for erro 404 (Modelo não encontrado), aborta logo
+            elif "404" in erro_str:
+                 print(f"❌ Erro 404 (Modelo não existe).")
+                 return f"⚠️ Erro Técnico: Modelo IA não encontrado."
             else:
                 print(f"❌ Erro IA: {e}")
                 return f"⚠️ Erro técnico na IA: {str(e)[:100]}"
     
-    return "⚠️ IA indisponível após várias tentativas."
+    return "⚠️ IA indisponível após várias tentativas (Cota estourada)."
 
 def enviar_telegram(mensagem, link):
     try:
@@ -169,13 +189,13 @@ def processar_rss(url_rss, nome_motor):
                 salvar_historico(link)
                 enviados.add(link)
                 
-                # Pausa padrão entre itens
+                # Pausa padrão
                 time.sleep(10)
                 count += 1
     print(f"   > Fim {nome_motor}: {count} itens.")
 
 def main():
-    print(f"🚀 Monitor V4 (Anti-Cota)")
+    print(f"🚀 Monitor V5 (Lista Prioritária)")
     rss_geral = "https://news.google.com/rss/search?q=concurso+bahia+OR+policia+bahia+OR+reda+bahia&hl=pt-BR&gl=BR&ceid=BR:pt-419"
     rss_gov = "https://news.google.com/rss/search?q=site:ba.gov.br+(reda+OR+processo+seletivo+OR+edital)&hl=pt-BR&gl=BR&ceid=BR:pt-419"
     processar_rss(rss_geral, "Geral")
