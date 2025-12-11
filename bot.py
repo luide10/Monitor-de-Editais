@@ -12,8 +12,6 @@ from email.utils import parsedate_to_datetime
 TELEGRAM_TOKEN = os.environ.get('TELEGRAM_TOKEN')
 GOOGLE_API_KEY = os.environ.get('GOOGLE_API_KEY')
 CHAT_ID = os.environ.get('MEU_CHAT_ID')
-
-# Captura se o Modo Teste foi ativado no GitHub (Vem como string 'true')
 MODO_TESTE = os.environ.get('MODO_TESTE', 'false').lower() == 'true'
 
 PALAVRAS_CHAVE = [
@@ -23,27 +21,71 @@ PALAVRAS_CHAVE = [
     "perito", "investigador", "delegado", "soldado"
 ]
 
-# --- CONFIGURAÇÃO DA IA ---
+# Configura a API
 genai.configure(api_key=GOOGLE_API_KEY)
-safety_settings = [
-    {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
-    {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
-    {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
-    {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
-]
-model = genai.GenerativeModel('gemini-pro', safety_settings=safety_settings)
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
-
 ARQUIVO_HISTORICO = "historico_enviados.txt"
 
-# --- 2. FUNÇÕES ---
+# --- 2. FUNÇÃO MÁGICA DE SELEÇÃO DE MODELO ---
+def configurar_modelo_automatico():
+    """
+    Pergunta ao Google quais modelos estão disponíveis para esta Chave API
+    e escolhe o melhor automaticamente para evitar Erro 404.
+    """
+    print("🔍 Buscando modelos disponíveis para sua Chave API...")
+    try:
+        # Lista todos os modelos que sua chave tem acesso
+        modelos_disponiveis = []
+        for m in genai.list_models():
+            if 'generateContent' in m.supported_generation_methods:
+                modelos_disponiveis.append(m.name)
+        
+        print(f"📋 Modelos encontrados: {modelos_disponiveis}")
+
+        # Tenta achar o melhor na ordem de preferência
+        preferencias = ['models/gemini-1.5-flash', 'models/gemini-1.5-pro', 'models/gemini-pro', 'models/gemini-1.0-pro']
+        
+        modelo_escolhido = None
+        
+        # 1. Tenta achar um dos preferidos na lista
+        for pref in preferencias:
+            if pref in modelos_disponiveis:
+                modelo_escolhido = pref
+                break
+        
+        # 2. Se não achar nenhum preferido, pega o primeiro que tiver 'gemini' no nome
+        if not modelo_escolhido:
+            for m in modelos_disponiveis:
+                if 'gemini' in m:
+                    modelo_escolhido = m
+                    break
+        
+        # 3. Se deu tudo errado, tenta forçar o flash
+        if not modelo_escolhido:
+            modelo_escolhido = 'gemini-1.5-flash'
+
+        print(f"✅ MODELO SELECIONADO: {modelo_escolhido}")
+        
+        safety_settings = [
+            {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
+        ]
+        
+        return genai.GenerativeModel(modelo_escolhido, safety_settings=safety_settings)
+
+    except Exception as e:
+        print(f"❌ Erro ao listar modelos (Usando fallback): {e}")
+        return genai.GenerativeModel('gemini-1.5-flash')
+
+# Inicializa o modelo usando a função automática
+model = configurar_modelo_automatico()
+
+# --- 3. FUNÇÕES DE SUPORTE ---
 
 def carregar_historico():
-    # Se estiver em modo teste, ignoramos o histórico para forçar reenvio!
-    if MODO_TESTE:
-        print("⚠️ MODO TESTE ATIVO: Ignorando histórico para reenviar mensagens.")
-        return set()
-    
+    if MODO_TESTE: return set()
     try:
         with open(ARQUIVO_HISTORICO, "r") as f:
             return set(f.read().splitlines())
@@ -51,7 +93,6 @@ def carregar_historico():
         return set()
 
 def salvar_historico(link):
-    # No modo teste, a gente não salva para não sujar o histórico real
     if not MODO_TESTE:
         with open(ARQUIVO_HISTORICO, "a") as f:
             f.write(f"{link}\n")
@@ -74,17 +115,19 @@ def analisar_com_ia(titulo, texto_site, link, fonte):
     """
     try:
         response = model.generate_content(prompt)
-        print(f"🤖 [DEBUG] Resposta IA: {response.text[:100]}...") 
+        if response.prompt_feedback.block_reason:
+            return "⚠️ A IA bloqueou o conteúdo por segurança."
         return response.text
     except Exception as e:
         print(f"❌ [ERRO IA] {e}")
-        return f"⚠️ **Erro na Análise IA**\nErro: {e}"
+        # Se der erro, tenta listar os modelos de novo no log para debug
+        return f"⚠️ **Erro Técnico na IA**\nO modelo falhou. Verifique os logs do GitHub.\nErro: {str(e)[:100]}"
 
 def enviar_telegram(mensagem, link):
     try:
-        prefixo = "🧪 [TESTE DE FORMATAÇÃO]\n" if MODO_TESTE else ""
+        prefixo = "🧪 [TESTE]\n" if MODO_TESTE else ""
+        if not mensagem: mensagem = "⚠️ Erro: Mensagem vazia."
         msg_final = f"{prefixo}{mensagem}\n\n🔗 **Link:** {link}"
-        
         bot.send_message(CHAT_ID, msg_final, parse_mode="Markdown")
         print("✅ Enviado Telegram!")
     except Exception as e:
@@ -99,12 +142,10 @@ def extrair_texto(url):
     except:
         return "Texto inacessível."
 
-# --- 3. MOTOR ---
+# --- 4. MOTORES ---
 
 def processar_rss(url_rss, nome_motor):
-    # SE FOR MODO TESTE: Pega últimas 24h. SE FOR NORMAL: Pega 3h.
     horas_filtro = 24 if MODO_TESTE else 3
-    
     print(f"--- 📡 Motor: {nome_motor} (Janela: {horas_filtro}h | Teste: {MODO_TESTE}) ---")
     
     feed = feedparser.parse(url_rss)
@@ -115,10 +156,7 @@ def processar_rss(url_rss, nome_motor):
     count = 0
     for entry in feed.entries:
         link = entry.link
-        
-        # Só pula se NÃO for teste E já estiver no histórico
-        if not MODO_TESTE and link in enviados: 
-            continue
+        if not MODO_TESTE and link in enviados: continue
 
         try:
             data_pub = parsedate_to_datetime(entry.published).replace(tzinfo=None)
@@ -131,7 +169,6 @@ def processar_rss(url_rss, nome_motor):
                 texto = extrair_texto(link)
                 analise = analisar_com_ia(entry.title, texto, link, nome_motor)
                 enviar_telegram(analise, link)
-                
                 salvar_historico(link)
                 enviados.add(link)
                 time.sleep(2)
@@ -139,11 +176,9 @@ def processar_rss(url_rss, nome_motor):
     print(f"   > Fim {nome_motor}: {count} processados.")
 
 def main():
-    print(f"🚀 Monitor Iniciado (Modo Teste: {MODO_TESTE})")
-    
+    print(f"🚀 Monitor Iniciado (v3.0 Auto-Fix)")
     rss_geral = "https://news.google.com/rss/search?q=concurso+bahia+OR+policia+bahia+OR+reda+bahia&hl=pt-BR&gl=BR&ceid=BR:pt-419"
     rss_gov = "https://news.google.com/rss/search?q=site:ba.gov.br+(reda+OR+processo+seletivo+OR+edital)&hl=pt-BR&gl=BR&ceid=BR:pt-419"
-    
     processar_rss(rss_geral, "Geral")
     processar_rss(rss_gov, "Governo")
     print("🏁 Fim.")
