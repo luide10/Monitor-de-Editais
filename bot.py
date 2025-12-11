@@ -21,50 +21,38 @@ PALAVRAS_CHAVE = [
     "perito", "investigador", "delegado", "soldado"
 ]
 
-# Configura a API
 genai.configure(api_key=GOOGLE_API_KEY)
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
 ARQUIVO_HISTORICO = "historico_enviados.txt"
 
-# --- 2. FUNÇÃO MÁGICA DE SELEÇÃO DE MODELO ---
-def configurar_modelo_automatico():
-    """
-    Pergunta ao Google quais modelos estão disponíveis para esta Chave API
-    e escolhe o melhor automaticamente para evitar Erro 404.
-    """
-    print("🔍 Buscando modelos disponíveis para sua Chave API...")
+# --- 2. SELETOR DE MODELO INTELIGENTE ---
+def configurar_modelo():
+    print("🔍 Configurando IA...")
+    # ORDEM DE PREFERÊNCIA ALTERADA: 1.5 Flash primeiro (Mais cota grátis)
+    preferencias = [
+        'models/gemini-1.5-flash', # O "Trator" (Alto limite)
+        'models/gemini-1.5-pro',
+        'models/gemini-2.0-flash', 
+        'models/gemini-pro'
+    ]
+    
     try:
-        # Lista todos os modelos que sua chave tem acesso
-        modelos_disponiveis = []
-        for m in genai.list_models():
-            if 'generateContent' in m.supported_generation_methods:
-                modelos_disponiveis.append(m.name)
-        
-        print(f"📋 Modelos encontrados: {modelos_disponiveis}")
-
-        # Tenta achar o melhor na ordem de preferência
-        preferencias = ['models/gemini-1.5-flash', 'models/gemini-1.5-pro', 'models/gemini-pro', 'models/gemini-1.0-pro']
-        
+        modelos_disponiveis = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
         modelo_escolhido = None
-        
-        # 1. Tenta achar um dos preferidos na lista
+
         for pref in preferencias:
             if pref in modelos_disponiveis:
                 modelo_escolhido = pref
                 break
         
-        # 2. Se não achar nenhum preferido, pega o primeiro que tiver 'gemini' no nome
         if not modelo_escolhido:
+            # Pega qualquer um que tenha gemini
             for m in modelos_disponiveis:
                 if 'gemini' in m:
                     modelo_escolhido = m
                     break
-        
-        # 3. Se deu tudo errado, tenta forçar o flash
-        if not modelo_escolhido:
-            modelo_escolhido = 'gemini-1.5-flash'
 
-        print(f"✅ MODELO SELECIONADO: {modelo_escolhido}")
+        print(f"✅ MODELO DEFINIDO: {modelo_escolhido}")
         
         safety_settings = [
             {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
@@ -72,17 +60,15 @@ def configurar_modelo_automatico():
             {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
             {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
         ]
-        
         return genai.GenerativeModel(modelo_escolhido, safety_settings=safety_settings)
 
     except Exception as e:
-        print(f"❌ Erro ao listar modelos (Usando fallback): {e}")
+        print(f"⚠️ Erro ao listar modelos: {e}. Usando fallback.")
         return genai.GenerativeModel('gemini-1.5-flash')
 
-# Inicializa o modelo usando a função automática
-model = configurar_modelo_automatico()
+model = configurar_modelo()
 
-# --- 3. FUNÇÕES DE SUPORTE ---
+# --- 3. FUNÇÕES ---
 
 def carregar_historico():
     if MODO_TESTE: return set()
@@ -98,14 +84,14 @@ def salvar_historico(link):
             f.write(f"{link}\n")
 
 def analisar_com_ia(titulo, texto_site, link, fonte):
-    print(f"🧠 [DEBUG] Enviando para IA: {titulo}")
+    print(f"🧠 [IA] Analisando: {titulo}")
     prompt = f"""
-    Aja como um especialista em concursos públicos. Analise:
+    Aja como especialista em concursos. Analise:
     FONTE: {fonte}
     TÍTULO: {titulo}
     TEXTO: {texto_site}
     
-    Responda EXATAMENTE neste formato (se faltar info, preencha "Não informado"):
+    Responda EXATAMENTE neste formato:
     📢 **ALERTA ({fonte})**
     🏢 **Órgão:** [Nome]
     💼 **Cargo:** [Cargos]
@@ -113,14 +99,26 @@ def analisar_com_ia(titulo, texto_site, link, fonte):
     📝 **Redação:** [Sim/Não]
     🎯 **Resumo:** [1 frase]
     """
-    try:
-        response = model.generate_content(prompt)
-        if response.prompt_feedback.block_reason:
-            return "⚠️ A IA bloqueou o conteúdo por segurança."
-        return response.text
-    except Exception as e:
-        print(f"❌ [ERRO IA] {e}")
-        return f"⚠️ **Erro Técnico na IA**\nO modelo falhou por limite de cota ou erro de conexão.\nErro: {str(e)[:100]}"
+    
+    # TENTATIVA COM RETRY (TEIMOSIA)
+    tentativas = 0
+    max_tentativas = 3
+    
+    while tentativas < max_tentativas:
+        try:
+            response = model.generate_content(prompt)
+            return response.text
+        except Exception as e:
+            erro_str = str(e)
+            if "429" in erro_str or "quota" in erro_str.lower():
+                print(f"⏳ Cota excedida (429). Esperando 60s antes de tentar de novo... (Tentativa {tentativas+1}/{max_tentativas})")
+                time.sleep(60) # Espera 1 minuto
+                tentativas += 1
+            else:
+                print(f"❌ Erro IA: {e}")
+                return f"⚠️ Erro técnico na IA: {str(e)[:100]}"
+    
+    return "⚠️ IA indisponível após várias tentativas."
 
 def enviar_telegram(mensagem, link):
     try:
@@ -141,11 +139,11 @@ def extrair_texto(url):
     except:
         return "Texto inacessível."
 
-# --- 4. MOTORES ---
+# --- 4. MOTOR ---
 
 def processar_rss(url_rss, nome_motor):
     horas_filtro = 24 if MODO_TESTE else 3
-    print(f"--- 📡 Motor: {nome_motor} (Janela: {horas_filtro}h | Teste: {MODO_TESTE}) ---")
+    print(f"--- 📡 Motor: {nome_motor} (Janela: {horas_filtro}h) ---")
     
     feed = feedparser.parse(url_rss)
     enviados = carregar_historico()
@@ -164,23 +162,20 @@ def processar_rss(url_rss, nome_motor):
 
         if data_pub > margem:
             if any(p in entry.title.lower() for p in PALAVRAS_CHAVE):
-                print(f"🔎 Processando: {entry.title}")
+                print(f"🔎 Achou: {entry.title}")
                 texto = extrair_texto(link)
                 analise = analisar_com_ia(entry.title, texto, link, nome_motor)
                 enviar_telegram(analise, link)
                 salvar_historico(link)
                 enviados.add(link)
                 
-                # --- PAUSA ANTI-BLOQUEIO (COTA 429) ---
-                print("💤 Aguardando 20s para respeitar a cota do Google...")
-                time.sleep(20)
-                # ---------------------------------------
-                
+                # Pausa padrão entre itens
+                time.sleep(10)
                 count += 1
-    print(f"   > Fim {nome_motor}: {count} processados.")
+    print(f"   > Fim {nome_motor}: {count} itens.")
 
 def main():
-    print(f"🚀 Monitor Iniciado (v3.1 Slow-Mode)")
+    print(f"🚀 Monitor V4 (Anti-Cota)")
     rss_geral = "https://news.google.com/rss/search?q=concurso+bahia+OR+policia+bahia+OR+reda+bahia&hl=pt-BR&gl=BR&ceid=BR:pt-419"
     rss_gov = "https://news.google.com/rss/search?q=site:ba.gov.br+(reda+OR+processo+seletivo+OR+edital)&hl=pt-BR&gl=BR&ceid=BR:pt-419"
     processar_rss(rss_geral, "Geral")
