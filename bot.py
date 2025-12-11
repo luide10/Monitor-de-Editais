@@ -120,8 +120,7 @@ def analisar_com_ia(titulo, texto_site, link, fonte):
         return response.text
     except Exception as e:
         print(f"❌ [ERRO IA] {e}")
-        # Se der erro, tenta listar os modelos de novo no log para debug
-        return f"⚠️ **Erro Técnico na IA**\nO modelo falhou. Verifique os logs do GitHub.\nErro: {str(e)[:100]}"
+        return f"⚠️ **Erro Técnico na IA**\nO modelo falhou por limite de cota ou erro de conexão.\nErro: {str(e)[:100]}"
 
 def enviar_telegram(mensagem, link):
     try:
@@ -171,12 +170,17 @@ def processar_rss(url_rss, nome_motor):
                 enviar_telegram(analise, link)
                 salvar_historico(link)
                 enviados.add(link)
-                time.sleep(2)
+                
+                # --- PAUSA ANTI-BLOQUEIO (COTA 429) ---
+                print("💤 Aguardando 20s para respeitar a cota do Google...")
+                time.sleep(20)
+                # ---------------------------------------
+                
                 count += 1
     print(f"   > Fim {nome_motor}: {count} processados.")
 
 def main():
-    print(f"🚀 Monitor Iniciado (v3.0 Auto-Fix)")
+    print(f"🚀 Monitor Iniciado (v3.1 Slow-Mode)")
     rss_geral = "https://news.google.com/rss/search?q=concurso+bahia+OR+policia+bahia+OR+reda+bahia&hl=pt-BR&gl=BR&ceid=BR:pt-419"
     rss_gov = "https://news.google.com/rss/search?q=site:ba.gov.br+(reda+OR+processo+seletivo+OR+edital)&hl=pt-BR&gl=BR&ceid=BR:pt-419"
     processar_rss(rss_geral, "Geral")
