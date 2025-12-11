@@ -31,7 +31,7 @@ safety_settings = [
     {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
     {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
 ]
-model = genai.GenerativeModel('gemini-1.5-flash', safety_settings=safety_settings)
+model = genai.GenerativeModel('gemini-pro', safety_settings=safety_settings)
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
 
 ARQUIVO_HISTORICO = "historico_enviados.txt"
