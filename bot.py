@@ -1,6 +1,7 @@
 import os
 import telebot
-import google.generativeai as genai
+from google import genai  # Nova biblioteca oficial
+from google.genai import types # Para configurações de segurança
 import feedparser
 import requests
 from bs4 import BeautifulSoup
@@ -21,76 +22,15 @@ PALAVRAS_CHAVE = [
     "perito", "investigador", "delegado", "soldado"
 ]
 
-genai.configure(api_key=GOOGLE_API_KEY)
+# Configuração da Nova API (Client)
+client = genai.Client(api_key=GOOGLE_API_KEY)
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
 ARQUIVO_HISTORICO = "historico_enviados.txt"
 
-# --- 2. NOVA INTELIGÊNCIA (TÁTICA DA METRALHADORA) ---
-def tentar_gerar_conteudo(prompt):
-    """
-    Tenta vários modelos diferentes em sequência. 
-    Se o 1.5 Flash falhar (404), tenta o Pro, depois o 1.0.
-    """
-    # Lista de nomes para tentar (do mais moderno para o mais antigo/estável)
-    modelos_para_tentar = [
-        'gemini-1.5-flash',
-        'gemini-1.5-flash-001',
-        'gemini-pro',
-        'models/gemini-1.5-flash', # Tenta com prefixo também
-        'models/gemini-pro'
-    ]
-    
-    safety_settings = [
-        {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
-        {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
-        {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
-        {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
-    ]
-
-    for nome_modelo in modelos_para_tentar:
-        try:
-            # Configura o modelo da vez
-            model = genai.GenerativeModel(nome_modelo, safety_settings=safety_settings)
-            
-            # Tenta gerar
-            response = model.generate_content(prompt)
-            
-            # Se chegou aqui, funcionou! Retorna o texto.
-            return response.text
-            
-        except Exception as e:
-            erro = str(e)
-            if "429" in erro:
-                print(f"⏳ Cota estourada no modelo {nome_modelo}. Tentando próximo...")
-                time.sleep(2) # Pequena pausa
-            elif "404" in erro:
-                print(f"⚠️ Modelo {nome_modelo} não encontrado (404). Tentando próximo...")
-            else:
-                print(f"❌ Erro no modelo {nome_modelo}: {erro}")
-            
-            # Se der erro, o loop continua para o próximo modelo da lista
-            continue
-            
-    # Se sair do loop, todos falharam
-    return None
-
-# --- 3. FUNÇÕES ---
-
-def carregar_historico():
-    if MODO_TESTE: return set()
-    try:
-        with open(ARQUIVO_HISTORICO, "r") as f:
-            return set(f.read().splitlines())
-    except FileNotFoundError:
-        return set()
-
-def salvar_historico(link):
-    if not MODO_TESTE:
-        with open(ARQUIVO_HISTORICO, "a") as f:
-            f.write(f"{link}\n")
-
+# --- 2. INTELIGÊNCIA ARTIFICIAL (NOVA API) ---
 def analisar_com_ia(titulo, texto_site, link, fonte):
     print(f"🧠 [IA] Analisando: {titulo}")
+    
     prompt = f"""
     Aja como especialista em concursos. Analise:
     FONTE: {fonte}
@@ -105,15 +45,66 @@ def analisar_com_ia(titulo, texto_site, link, fonte):
     📝 **Redação:** [Sim/Não]
     🎯 **Resumo:** [1 frase]
     """
-    
-    # Chama a função nova que tenta vários modelos
-    resposta = tentar_gerar_conteudo(prompt)
-    
-    if resposta:
-        return resposta
-    else:
-        print("❌ FALHA TOTAL: Nenhum modelo de IA funcionou.")
-        return None
+
+    # Lista de modelos para tentar (Prioridade: 1.5 Flash pelo alto limite)
+    modelos = ["gemini-1.5-flash", "gemini-2.0-flash-exp", "gemini-1.5-pro"]
+
+    for modelo in modelos:
+        try:
+            response = client.models.generate_content(
+                model=modelo,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    safety_settings=[
+                        types.SafetySetting(
+                            category="HARM_CATEGORY_DANGEROUS_CONTENT",
+                            threshold="BLOCK_NONE"
+                        ),
+                        types.SafetySetting(
+                            category="HARM_CATEGORY_HARASSMENT",
+                            threshold="BLOCK_NONE"
+                        ),
+                        types.SafetySetting(
+                            category="HARM_CATEGORY_HATE_SPEECH",
+                            threshold="BLOCK_NONE"
+                        ),
+                        types.SafetySetting(
+                            category="HARM_CATEGORY_SEXUALLY_EXPLICIT",
+                            threshold="BLOCK_NONE"
+                        ),
+                    ]
+                )
+            )
+            return response.text
+            
+        except Exception as e:
+            # Se der erro 429 (Cota), tenta o próximo modelo ou espera
+            if "429" in str(e):
+                print(f"⏳ Cota cheia no {modelo}. Tentando próximo...")
+                time.sleep(1)
+                continue # Pula para o próximo modelo da lista
+            else:
+                print(f"⚠️ Erro no modelo {modelo}: {e}")
+                # Se não for erro de cota, tenta o próximo também
+                continue
+
+    print("❌ Todos os modelos falharam.")
+    return None
+
+# --- 3. FUNÇÕES DE SUPORTE ---
+
+def carregar_historico():
+    if MODO_TESTE: return set()
+    try:
+        with open(ARQUIVO_HISTORICO, "r") as f:
+            return set(f.read().splitlines())
+    except FileNotFoundError:
+        return set()
+
+def salvar_historico(link):
+    if not MODO_TESTE:
+        with open(ARQUIVO_HISTORICO, "a") as f:
+            f.write(f"{link}\n")
 
 def enviar_telegram(mensagem_ia, link, titulo_original):
     try:
@@ -122,11 +113,10 @@ def enviar_telegram(mensagem_ia, link, titulo_original):
         if mensagem_ia:
             msg_final = f"{prefixo}{mensagem_ia}\n\n🔗 **Link:** {link}"
         else:
-            # FALLBACK FINAL: Se a IA falhar tudo, manda só o link
             msg_final = (
                 f"{prefixo}📢 **ALERTA DE OPORTUNIDADE**\n\n"
                 f"📌 **Título:** {titulo_original}\n"
-                f"⚠️ _IA indisponível no momento, confira o link:_\n\n"
+                f"⚠️ _IA indisponível, acesse o link:_\n\n"
                 f"🔗 **Link:** {link}"
             )
 
@@ -144,7 +134,7 @@ def extrair_texto(url):
     except:
         return "Texto inacessível."
 
-# --- 4. MOTOR ---
+# --- 4. MOTOR DE BUSCA ---
 
 def processar_rss(url_rss, nome_motor):
     horas_filtro = 24 if MODO_TESTE else 3
@@ -170,10 +160,7 @@ def processar_rss(url_rss, nome_motor):
                 print(f"🔎 Achou: {entry.title}")
                 texto = extrair_texto(link)
                 
-                # Análise inteligente
                 analise = analisar_com_ia(entry.title, texto, link, nome_motor)
-                
-                # Envio
                 enviar_telegram(analise, link, entry.title)
                 
                 salvar_historico(link)
@@ -183,7 +170,7 @@ def processar_rss(url_rss, nome_motor):
     print(f"   > Fim {nome_motor}: {count} itens.")
 
 def main():
-    print(f"🚀 Monitor V8 (Multi-Modelos)")
+    print(f"🚀 Monitor V9 (Engine Google GenAI)")
     
     rss_geral = "https://news.google.com/rss/search?q=concurso+bahia+OR+policia+bahia+OR+reda+bahia&hl=pt-BR&gl=BR&ceid=BR:pt-419"
     rss_gov = "https://news.google.com/rss/search?q=site:ba.gov.br+(reda+OR+processo+seletivo+OR+edital)&hl=pt-BR&gl=BR&ceid=BR:pt-419"
