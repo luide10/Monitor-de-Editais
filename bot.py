@@ -1,6 +1,6 @@
 import os
 import telebot
-import requests # Usaremos requests para falar com a IA diretamente
+import requests # HTTP Direto
 import feedparser
 from bs4 import BeautifulSoup
 import time
@@ -42,20 +42,22 @@ def analisar_com_ia(titulo, texto_site, link, fonte):
     🎯 **Resumo:** [1 frase]
     """
 
-    # Lista de modelos para tentar via URL direta
+    # LISTA DE MODELOS ATUALIZADA (V11)
+    # Tentamos os "Apelidos" (latest) primeiro, pois costumam ser mais estáveis na API
     modelos = [
-        "gemini-1.5-flash",      # O Trator (Cota Alta)
-        "gemini-1.5-flash-8b",   # Versão leve
-        "gemini-1.5-pro",        # Versão potente
-        "gemini-2.0-flash-exp"   # Versão nova (Cota baixa)
+        "gemini-flash-latest",    # Apelido para a versão Flash mais nova
+        "gemini-1.5-flash-latest", # Outro apelido comum
+        "gemini-1.5-flash-001",    # Versão específica (às vezes a genérica falha)
+        "gemini-1.5-flash-002",    # Versão atualizada
+        "gemini-pro",              # O clássico
+        "gemini-2.0-flash-exp"     # Último recurso (Cota baixa)
     ]
 
     for modelo in modelos:
         try:
-            # URL Mágica da API REST do Google
+            # URL da API REST
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{modelo}:generateContent?key={GOOGLE_API_KEY}"
             
-            # O "Pacote" JSON que enviamos
             payload = {
                 "contents": [{
                     "parts": [{"text": prompt}]
@@ -70,39 +72,36 @@ def analisar_com_ia(titulo, texto_site, link, fonte):
             
             headers = {'Content-Type': 'application/json'}
             
-            # Envia a requisição
-            response = requests.post(url, json=payload, headers=headers, timeout=30)
+            # Timeout curto para testar vários rápido
+            response = requests.post(url, json=payload, headers=headers, timeout=20)
             
-            # Verifica se deu certo (Código 200 = OK)
             if response.status_code == 200:
                 dados = response.json()
                 try:
-                    # Tenta pegar o texto da resposta
                     texto_resposta = dados['candidates'][0]['content']['parts'][0]['text']
+                    # SUCESSO!
                     return texto_resposta
                 except (KeyError, IndexError):
-                    # Se a resposta veio vazia ou bloqueada
-                    print(f"⚠️ Modelo {modelo} respondeu mas sem texto (Bloqueio?).")
+                    print(f"⚠️ Modelo {modelo} respondeu vazio.")
                     continue
             
             elif response.status_code == 429:
-                print(f"⏳ Cota cheia no {modelo} (429). Tentando próximo...")
-                time.sleep(1)
-                continue
+                print(f"⏳ Cota cheia no {modelo} (429).")
+                continue # Não espera, já tenta o próximo
             
             elif response.status_code == 404:
-                print(f"⚠️ Modelo {modelo} não encontrado na API (404).")
+                print(f"⚠️ Modelo {modelo} não encontrado (404).")
                 continue
                 
             else:
-                print(f"❌ Erro HTTP {response.status_code} no modelo {modelo}: {response.text}")
+                print(f"❌ Erro {response.status_code} no {modelo}: {response.text[:100]}")
                 continue
             
         except Exception as e:
-            print(f"❌ Erro de conexão com {modelo}: {e}")
+            print(f"❌ Erro conexão {modelo}: {e}")
             continue
 
-    print("❌ Todos os modelos falharam.")
+    print("❌ Todos os modelos falharam (Fallback ativado).")
     return None
 
 # --- 3. FUNÇÕES DE SUPORTE ---
@@ -127,10 +126,11 @@ def enviar_telegram(mensagem_ia, link, titulo_original):
         if mensagem_ia:
             msg_final = f"{prefixo}{mensagem_ia}\n\n🔗 **Link:** {link}"
         else:
+            # Fallback bonito se a IA falhar
             msg_final = (
                 f"{prefixo}📢 **ALERTA DE OPORTUNIDADE**\n\n"
                 f"📌 **Título:** {titulo_original}\n"
-                f"⚠️ _IA indisponível (Fallback), acesse o link:_\n\n"
+                f"⚠️ _Resumo indisponível (IA ocupada)_\n\n"
                 f"🔗 **Link:** {link}"
             )
 
@@ -148,7 +148,7 @@ def extrair_texto(url):
     except:
         return "Texto inacessível."
 
-# --- 4. MOTOR DE BUSCA ---
+# --- 4. MOTOR ---
 
 def processar_rss(url_rss, nome_motor):
     horas_filtro = 24 if MODO_TESTE else 3
@@ -173,18 +173,16 @@ def processar_rss(url_rss, nome_motor):
             if any(p in entry.title.lower() for p in PALAVRAS_CHAVE):
                 print(f"🔎 Achou: {entry.title}")
                 texto = extrair_texto(link)
-                
                 analise = analisar_com_ia(entry.title, texto, link, nome_motor)
                 enviar_telegram(analise, link, entry.title)
-                
                 salvar_historico(link)
                 enviados.add(link)
-                time.sleep(15) 
+                time.sleep(15)
                 count += 1
     print(f"   > Fim {nome_motor}: {count} itens.")
 
 def main():
-    print(f"🚀 Monitor V10 (Direct HTTP - No SDK)")
+    print(f"🚀 Monitor V11 (Name Fix)")
     
     rss_geral = "https://news.google.com/rss/search?q=concurso+bahia+OR+policia+bahia+OR+reda+bahia&hl=pt-BR&gl=BR&ceid=BR:pt-419"
     rss_gov = "https://news.google.com/rss/search?q=site:ba.gov.br+(reda+OR+processo+seletivo+OR+edital)&hl=pt-BR&gl=BR&ceid=BR:pt-419"
