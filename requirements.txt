@@ -1,5 +1,4 @@
 pyTelegramBotAPI
-google-genai
-feedparser
 requests
+feedparser
 beautifulsoup4
