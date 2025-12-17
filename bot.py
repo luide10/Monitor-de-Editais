@@ -25,21 +25,23 @@ genai.configure(api_key=GOOGLE_API_KEY)
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
 ARQUIVO_HISTORICO = "historico_enviados.txt"
 
-# --- 2. SELETOR DE MODELO (V6 - FALLBACK SEGURO) ---
+# --- 2. SELETOR DE MODELO (V7.1 - CORRETOR DE PREFIXO) ---
 def configurar_modelo():
     print("🔍 Configurando IA...")
     
-    # Prioriza modelos com alta cota (1.5 Flash)
+    # Lista de preferência
     preferencias = [
-        'models/gemini-1.5-flash',
-        'models/gemini-1.5-flash-001',
-        'models/gemini-1.5-flash-002',
-        'models/gemini-1.5-flash-8b',
-        'models/gemini-pro'
+        'gemini-1.5-flash',
+        'gemini-1.5-flash-001',
+        'gemini-1.5-flash-002',
+        'gemini-pro'
     ]
     
     try:
-        todos_modelos = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+        # Pega a lista da API e LIMPA o prefixo 'models/' se vier
+        modelos_raw = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+        todos_modelos = [m.replace('models/', '') for m in modelos_raw]
+        
         modelo_escolhido = None
 
         for pref in preferencias:
@@ -47,8 +49,9 @@ def configurar_modelo():
                 modelo_escolhido = pref
                 break
         
+        # Fallback se não achar
         if not modelo_escolhido:
-             modelo_escolhido = 'models/gemini-1.5-flash'
+             modelo_escolhido = 'gemini-1.5-flash'
 
         print(f"✅ MODELO DEFINIDO: {modelo_escolhido}")
         
@@ -61,7 +64,7 @@ def configurar_modelo():
         return genai.GenerativeModel(modelo_escolhido, safety_settings=safety_settings)
 
     except Exception as e:
-        print(f"⚠️ Erro ao listar modelos: {e}. Forçando 1.5 Flash.")
+        print(f"⚠️ Erro ao listar modelos: {e}. Forçando 1.5 Flash limpo.")
         return genai.GenerativeModel('gemini-1.5-flash')
 
 model = configurar_modelo()
@@ -102,6 +105,16 @@ def analisar_com_ia(titulo, texto_site, link, fonte):
         response = model.generate_content(prompt)
         return response.text
     except Exception as e:
+        # Se for erro 404 de novo, tenta forçar o gemini-pro na hora H
+        if "404" in str(e):
+             print("⚠️ Erro 404 com Flash. Tentando Pro...")
+             try:
+                 backup_model = genai.GenerativeModel('gemini-pro')
+                 response = backup_model.generate_content(prompt)
+                 return response.text
+             except:
+                 pass
+        
         print(f"❌ Erro IA: {e}")
         return None
 
@@ -115,7 +128,7 @@ def enviar_telegram(mensagem_ia, link, titulo_original):
             msg_final = (
                 f"{prefixo}📢 **ALERTA DE OPORTUNIDADE**\n\n"
                 f"📌 **Título:** {titulo_original}\n"
-                f"⚠️ _Resumo indisponível (IA ocupada)_\n\n"
+                f"⚠️ _Resumo indisponível (Erro de API)_\n\n"
                 f"🔗 **Link:** {link}"
             )
 
@@ -155,7 +168,6 @@ def processar_rss(url_rss, nome_motor):
             data_pub = agora 
 
         if data_pub > margem:
-            # Verifica palavras chaves NO TÍTULO
             if any(p in entry.title.lower() for p in PALAVRAS_CHAVE):
                 print(f"🔎 Achou: {entry.title}")
                 texto = extrair_texto(link)
@@ -163,29 +175,19 @@ def processar_rss(url_rss, nome_motor):
                 enviar_telegram(analise, link, entry.title)
                 salvar_historico(link)
                 enviados.add(link)
-                time.sleep(15) # Pausa anti-spam
+                time.sleep(15) 
                 count += 1
     print(f"   > Fim {nome_motor}: {count} itens.")
 
 def main():
-    print(f"🚀 Monitor V7 (Big Data Sources)")
+    print(f"🚀 Monitor V7.1 (Name Fix)")
     
-    # 1. Busca Geral (Jornais, G1, Blogs)
     rss_geral = "https://news.google.com/rss/search?q=concurso+bahia+OR+policia+bahia+OR+reda+bahia&hl=pt-BR&gl=BR&ceid=BR:pt-419"
-    
-    # 2. Busca Oficial (Governo do Estado)
     rss_gov = "https://news.google.com/rss/search?q=site:ba.gov.br+(reda+OR+processo+seletivo+OR+edital)&hl=pt-BR&gl=BR&ceid=BR:pt-419"
-    
-    # 3. PCI Concursos (Filtro: Bahia)
     rss_pci = "https://news.google.com/rss/search?q=site:pciconcursos.com.br+concurso+bahia&hl=pt-BR&gl=BR&ceid=BR:pt-419"
-    
-    # 4. QConcursos / Folha Dirigida (Filtro: Bahia)
     rss_folha = "https://news.google.com/rss/search?q=site:folha.qconcursos.com+concurso+bahia&hl=pt-BR&gl=BR&ceid=BR:pt-419"
-    
-    # 5. JC Concursos (Filtro: Bahia)
     rss_jc = "https://news.google.com/rss/search?q=site:jcconcursos.com.br+concurso+bahia&hl=pt-BR&gl=BR&ceid=BR:pt-419"
     
-    # Execução dos motores
     processar_rss(rss_gov, "Governo BA")
     processar_rss(rss_pci, "PCI Concursos")
     processar_rss(rss_folha, "Folha Dirigida")
