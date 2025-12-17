@@ -1,0 +1,19 @@
+name: 🧹 Faxina Geral
+
+on:
+  workflow_dispatch: # Botão manual
+
+jobs:
+  del_runs:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - name: Apagar workflows antigos
+        uses: Mattraks/delete-workflow-runs@v2
+        with:
+          token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          retain_days: 0
+          keep_minimum_runs: 0
